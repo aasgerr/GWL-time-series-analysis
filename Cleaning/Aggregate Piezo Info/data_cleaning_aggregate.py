@@ -11,7 +11,6 @@ Created on Sat Nov 27 22:50:13 2021
 import pandas as pd
 from googletrans import Translator
 from pyproj import Proj, transform
-import sys
 
 #Setting translator for Spanish to English
 translator = Translator()
@@ -24,7 +23,7 @@ meta_data = meta_data.to_dict()
 meta_data_id = meta_data["ID"]
 
 
-def esp_to_en(raw_cp):
+def esp_to_en(df):
     '''
     Converts column headers from Spanish to English.
 
@@ -40,73 +39,41 @@ def esp_to_en(raw_cp):
 
     '''
     
-    col_sp = list(raw_cp.columns)
+    col_sp = list(df.columns)
     col_en = []
     
     for i in range(len(col_sp)):
         col_en.append(translator.translate(col_sp[i]).text)
         
     col_en[2] = "Province"
-    col_en[-2] = "Level (m)"
-    col_en[-1] = "Dimension (m)"
+    col_en[-4] = "Longitude"
+    col_en[-3] = "Latitude"
     
-    raw_cp.columns = col_en
+    df.columns = col_en
     
-    return raw_cp
+    return df
 
 
-def insert_decimal(raw_cp):
+def drop(df, drop_label):
     '''
-    Removes the commas to insert decimals.
+    Drop the unnecesary columns from data frame.
 
     Parameters
     ----------
-    raw_cp : Data Frame
-        The CSV style data frame.
-
-    Returns
-    -------
-    raw_cp : Data Frame
-        Decimal inserted data frame.
-
-    '''
-    
-    raw_cp = raw_cp.apply(lambda x: x.str.replace(',','.'))
-    raw_cp['Level (m)'] = raw_cp['Level (m)'].apply(pd.to_numeric)
-    raw_cp['Dimension (m)'] = raw_cp['Dimension (m)'].apply(pd.to_numeric)
-    raw_cp['Level (m)'] = raw_cp['Level (m)'].apply(pd.to_numeric)
-    raw_cp['Dimension (m)'] = raw_cp['Dimension (m)'].apply(pd.to_numeric)
-    
-    return raw_cp
-
-
-def deletion(raw_cp):
-    '''
-    Deletes the unnecesary columns from data frame.
-
-    Parameters
-    ----------
-    raw_cp : Data Frame
+    df : Data Frame
         Undeleted column data frame.
 
     Returns
     -------
-    raw_cp : TYPE
+    df : Data Frame
         Necessary column data frame.
 
     '''
     
-    try:
-        del raw_cp['Date Level']
-        del raw_cp['Groundwater body on which the piezometer is located']
-        del raw_cp['Description']
-        del raw_cp['Depth (m)']
-        del raw_cp['No. of measures']
-        del raw_cp['Hydrogeological Unit']
-    except:
-        sys.exit("googletrans not working right now...\n Try again later!")
+    for i in drop_label:
+        df = df.drop(df.columns[i], axis=1)
     
-    return raw_cp
+    return df
     
 
 def raw_changes(raw_cp):
@@ -127,20 +94,20 @@ def raw_changes(raw_cp):
     
     raw_cp.columns = raw_cp.iloc[0]
     raw_cp = raw_cp.drop(raw_cp.index[[0]])
-    raw_cp_en = esp_to_en(raw_cp)
-    raw_cp_dec = insert_decimal(raw_cp_en)
-    raw_cp_del = deletion(raw_cp_dec)
     
-    return raw_cp_del
+    drop_label = [4,4,6,6,7,-1,-1,-2]
+    raw_cp_drop = drop(raw_cp, drop_label)
+    
+    return raw_cp_drop
 
 
-def column(raw_cp):
+def column(df):
     '''
     Creates the list of columns as per required for final aggregate dataframe.
 
     Parameters
     ----------
-    raw_cp : Data Frame
+    df : Data Frame
         The dataframe on which cleaning has been done.
 
     Returns
@@ -150,10 +117,8 @@ def column(raw_cp):
 
     '''
     
-    col = list(raw_cp.columns)
-    col = col[0:-5]
-    col.append('Longitude')
-    col.append('Latitude')
+    col = list(df.columns)
+    col = col[:-1]
     col.append(' Measurement Start Date')
     col.append('Measurement Last Date')
     
@@ -177,7 +142,9 @@ def df_create():
     raw_cp = raw.copy()
     raw_final = raw_changes(raw_cp)
     
-    df = pd.DataFrame(columns = column(raw_final)) 
+    col = column(raw_final)
+    
+    df = pd.DataFrame(columns = col) 
     
     return df
 
@@ -211,7 +178,7 @@ def coord_tranform(x1,y1):
     return x2, y2
 
 
-def data_append(raw_cp):
+def data_append(df):
     '''
     
     The function extracts a row of data from raw dataframe to append to 
@@ -219,7 +186,7 @@ def data_append(raw_cp):
 
     Parameters
     ----------
-    raw_cp : Data Frame
+    df : Data Frame
         The version of data frame for following change to apply.
 
     Returns
@@ -230,22 +197,24 @@ def data_append(raw_cp):
     '''
     
     row = []
-    col = column(raw_cp)
+    col = column(df)
     
     for i in col[:-4]:
-        row.append(raw_cp[i].iloc[0])
+        row.append(df[i].iloc[0])
         
-    x1 = int(raw_cp['X coordinate (ETRS89)'].iloc[0].replace(".",""))
-    y1 = int(raw_cp['Y coordinate (ETRS89)'].iloc[0].replace(".",""))
+    x1 = int(df['Coordenada X (ETRS89)'].iloc[0].replace(".",""))
+    y1 = int(df['Coordenada Y (ETRS89)'].iloc[0].replace(".",""))
     
     x2, y2 = coord_tranform(x1, y1)
     
     row.append(x2)
     row.append(y2)
-    row.append(raw_cp['Date'].iloc[0])
-    row.append(raw_cp['Date'].iloc[-1])
+    row.append(df['Fecha'].iloc[0])
+    row.append(df['Fecha'].iloc[-1])
     
-    return row
+    dic_app = dict(zip(col, row))
+    
+    return dic_app
     
 
 if __name__=="__main__":  
@@ -255,15 +224,21 @@ if __name__=="__main__":
 
     # Working with raw data 
     for meta_id in meta_data_id.values():
-        path = "Scraping/Raw Data/"+str(meta_id)+".csv"
+        path = "/Users/aliasger/Desktop/Github/GWL-time-series-analysis/Scraping/Raw Data/"+str(meta_id)+".csv"
         raw = pd.read_csv(path) 
         raw_cp = raw.copy()
         raw_final = raw_changes(raw_cp)
         row = data_append(raw_final)
-        df.loc[len(df.index)] = row
+        df = df.append(row, ignore_index=True)
+        
+    
+    df_final = esp_to_en(df)
     
     # Exporting the dataframe to csv
-    df.to_csv("Piezometer_Info.csv")
+    if df_final.columns[3] == "Municipio":
+        print("googletrans not working....\nTry again later!")
+    else:
+        df_final.to_csv("Piezometer_Info.csv")
     
 
 
