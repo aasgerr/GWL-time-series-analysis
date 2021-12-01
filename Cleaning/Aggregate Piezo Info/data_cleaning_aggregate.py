@@ -46,8 +46,8 @@ def esp_to_en(df):
         col_en.append(translator.translate(col_sp[i]).text)
         
     col_en[2] = "Province"
-    col_en[-4] = "Longitude"
-    col_en[-3] = "Latitude"
+    col_en[-4] = "Latitude"
+    col_en[-3] = "Longitude"
     
     df.columns = col_en
     
